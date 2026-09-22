@@ -1,15 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Generic, Sequence, TypeVar
+from typing import Sequence
 
 from src.game.move import Move
 from src.game.outcome import Outcome
 from src.game.state import State
 
-StateT = TypeVar("StateT", bound="State")
-MoveT = TypeVar("MoveT", bound="Move")
 
-
-class Game(ABC, Generic[StateT, MoveT]):
+class Game[StateT: State, MoveT: Move](ABC):
     @abstractmethod
     def initial(self) -> StateT:
         raise NotImplementedError

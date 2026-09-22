@@ -6,8 +6,8 @@ from src.game.move import Move
 from src.game.state import State
 
 
-class RandomAI(AI):
-    def choose_move(self, state: State) -> Move:
+class RandomAI[StateT: State, MoveT: Move](AI[StateT, MoveT]):
+    def choose_move(self, state: StateT) -> MoveT:
         legal_moves = self._game.legal_moves(state)
 
         if len(legal_moves) == 0:
