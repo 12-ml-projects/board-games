@@ -1,6 +1,6 @@
 import pytest
 
-from src.ai.exceptions import NoLegalMovesException
+from src.exceptions import NoLegalMovesException
 from src.tic_tac_toe.state import TTTState
 from tests.integration.ai.conftest import RandomAIFactory
 from tests.integration.conftest import TTTFactory

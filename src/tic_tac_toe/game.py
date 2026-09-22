@@ -1,8 +1,9 @@
+from math import tanh
 from typing import Final, TypeAlias
 
 from src.game.game import Game
 from src.game.outcome import DRAW, ONGOING, Outcome
-from src.player import Player
+from src.player import Player, opposite_player
 from src.tic_tac_toe.move import TTTMove
 from src.tic_tac_toe.state import Board, Cell, TTTState
 
@@ -15,6 +16,10 @@ LINES: Final[tuple[Line, ...]] = (
     tuple((i, i) for i in range(3)),
     tuple((i, 2 - i) for i in range(3)),
 )
+
+
+# Keeps heuristic values strictly inside the [-1.0, 1.0]. Boundary owned by final state
+HEURISTIC_CEILING: Final[float] = 0.9
 
 
 class TTTGame(Game[TTTState, TTTMove]):
@@ -40,7 +45,7 @@ class TTTGame(Game[TTTState, TTTMove]):
             for x, row in enumerate(state.board)
         )
 
-        return TTTState(board=new_board, player=self._other(state.player))
+        return TTTState(board=new_board, player=opposite_player(state.player))
 
     def outcome(self, state: TTTState) -> Outcome:
         board = state.board
@@ -54,6 +59,23 @@ class TTTGame(Game[TTTState, TTTMove]):
             return DRAW
 
         return ONGOING
+
+    def material(self, state: TTTState) -> float:
+        """Counts winnable lines."""
+        mine = self._get_symbol_for_player(state.player)
+        theirs = self._get_symbol_for_player(opposite_player(state.player))
+
+        return float(
+            self._open_lines(state.board, theirs) - self._open_lines(state.board, mine)
+        )
+
+    def evaluate_material(self, material_advantage: float) -> float:
+        return tanh(material_advantage) * HEURISTIC_CEILING
+
+    def _open_lines(self, board: Board, blocked_by: Cell) -> int:
+        return sum(
+            1 for line in LINES if all(board[x][y] != blocked_by for x, y in line)
+        )
 
     def _get_symbol_for_player(self, player: Player) -> Cell:
         if player == "A":
@@ -70,6 +92,3 @@ class TTTGame(Game[TTTState, TTTMove]):
             return "B"
 
         raise ValueError(f"No player for symbol: {symbol!r}")
-
-    def _other(self, player: Player) -> Player:
-        return "B" if player == "A" else "A"
