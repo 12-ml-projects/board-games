@@ -18,3 +18,6 @@ dist/
 
 # --- tox --- #
 .tox
+
+# -- Editor -- #
+.vscode/*.json

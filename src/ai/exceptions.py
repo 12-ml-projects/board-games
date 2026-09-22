@@ -1,0 +1,2 @@
+class NoLegalMovesException(Exception):
+    pass
