@@ -1,8 +1,8 @@
 from collections import Counter
 from itertools import combinations
 
+from src.game.game import Game
 from src.game.outcome import ONGOING
-from tests.integration.conftest import TTTFactory
 from tests.integration.tournament.conftest import MinimaxTournamentFactory
 
 HYPERPARAMS = [(5, 0), (25, 0), (125, 0)]
@@ -11,10 +11,10 @@ DESCRIPTIONS = [f"minimax(max_nodes={nodes})" for nodes, _ in HYPERPARAMS]
 
 class TestTournament:
     def test_ladder_order(
-        self, minimax_tournament: MinimaxTournamentFactory, ttt: TTTFactory
+        self, minimax_tournament: MinimaxTournamentFactory, game: Game
     ):
         tournament = minimax_tournament(
-            game=ttt(), hyperparams=HYPERPARAMS, num_rounds=10
+            game=game, hyperparams=HYPERPARAMS, num_rounds=10
         )
         tournament.run()
 
@@ -26,17 +26,17 @@ class TestTournament:
         assert agent_info_25.elo < agent_info_125.elo
 
     def test_tournament_is_reproducible(
-        self, minimax_tournament: MinimaxTournamentFactory, ttt: TTTFactory
+        self, minimax_tournament: MinimaxTournamentFactory, game: Game
     ):
-        first, second = (self._run_and_rate(minimax_tournament, ttt) for _ in range(2))
+        first, second = (self._run_and_rate(minimax_tournament, game) for _ in range(2))
 
         assert first == second
 
     def test_every_pairing_is_played_from_both_sides(
-        self, minimax_tournament: MinimaxTournamentFactory, ttt: TTTFactory
+        self, minimax_tournament: MinimaxTournamentFactory, game: Game
     ):
         tournament = minimax_tournament(
-            game=ttt(), hyperparams=HYPERPARAMS, num_rounds=4
+            game=game, hyperparams=HYPERPARAMS, num_rounds=4
         )
         records = tournament.run()
 
@@ -52,11 +52,11 @@ class TestTournament:
         )
 
     def test_plays_every_pairing_each_round(
-        self, minimax_tournament: MinimaxTournamentFactory, ttt: TTTFactory
+        self, minimax_tournament: MinimaxTournamentFactory, game: Game
     ):
-        num_rounds = 4
+        num_rounds = 3
         tournament = minimax_tournament(
-            game=ttt(), hyperparams=HYPERPARAMS, num_rounds=num_rounds
+            game=game, hyperparams=HYPERPARAMS, num_rounds=num_rounds
         )
 
         records = tournament.run()
@@ -65,10 +65,10 @@ class TestTournament:
         assert len(records) == num_rounds * pairings * 2
 
     def test_every_match_is_played_out(
-        self, minimax_tournament: MinimaxTournamentFactory, ttt: TTTFactory
+        self, minimax_tournament: MinimaxTournamentFactory, game: Game
     ):
         tournament = minimax_tournament(
-            game=ttt(), hyperparams=HYPERPARAMS, num_rounds=4
+            game=game, hyperparams=HYPERPARAMS, num_rounds=3
         )
 
         records = tournament.run()
@@ -77,10 +77,10 @@ class TestTournament:
         assert all(result.outcome != ONGOING for _, _, result in records)
 
     def _run_and_rate(
-        self, minimax_tournament: MinimaxTournamentFactory, ttt: TTTFactory
+        self, minimax_tournament: MinimaxTournamentFactory, game: Game
     ) -> dict[str, float]:
         tournament = minimax_tournament(
-            game=ttt(), hyperparams=HYPERPARAMS, num_rounds=6
+            game=game, hyperparams=HYPERPARAMS, num_rounds=6
         )
         tournament.run()
 

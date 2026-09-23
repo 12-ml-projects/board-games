@@ -27,6 +27,12 @@ class MinimaxTournamentFactory[StateT: State, MoveT: Move](Protocol):
     ) -> Tournament[StateT, MoveT]: ...
 
 
+@pytest.fixture(params=["ttt", "c4"])
+def game(request: pytest.FixtureRequest) -> Game:
+    """Each test using this runs once per game, so nothing is tic-tac-toe specific."""
+    return request.getfixturevalue(request.param)()
+
+
 @pytest.fixture()
 def minimax_agents() -> MiniMaxAgentsFactory:
     def _minimax_agents(
