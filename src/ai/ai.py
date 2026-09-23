@@ -12,3 +12,7 @@ class AI[StateT: State, MoveT: Move](ABC):
     @abstractmethod
     def choose_move(self, state: StateT) -> MoveT:
         pass
+
+    @property
+    def description(self) -> str:
+        return type(self).__name__.lower()

@@ -104,3 +104,7 @@ class MiniMax[StateT: State, MoveT: Move](AI[StateT, MoveT]):
                 break
 
         return value
+
+    @property
+    def description(self) -> str:
+        return f"minimax(max_nodes={self.max_nodes})"
