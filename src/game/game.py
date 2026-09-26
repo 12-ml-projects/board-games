@@ -34,6 +34,9 @@ class Game[StateT: State, MoveT: Move](ABC):
     def is_legal_move(self, state: StateT, move: MoveT) -> bool:
         return move in self.legal_moves(state)
 
+    def move_priority(self, move: MoveT) -> float:
+        return 0.0
+
     def is_final_state(self, state: StateT) -> bool:
         return self.outcome(state) != ONGOING
 

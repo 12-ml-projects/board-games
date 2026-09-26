@@ -7,15 +7,11 @@ from src.connect_four.exceptions import ColumnIsFullException
 from src.connect_four.move import C4Move
 from src.connect_four.state import Board, C4State, Cell
 from src.game.game import Game
-from src.game.outcome import DRAW, ONGOING, Outcome
+from src.game.outcome import DRAW, HEURISTIC_CEILING, ONGOING, Outcome
 from src.player import Player, opposite_player
 
 Position: TypeAlias = tuple[int, int]
 Window: TypeAlias = tuple[Position, ...]
-
-
-# Cap for non-winning positions
-HEURISTIC_CEILING: Final[float] = 0.9
 
 
 # Running window length needed to win
@@ -90,17 +86,24 @@ class C4Game(Game[C4State, C4Move]):
 
         return not self._is_full(move.column, state)
 
+    def move_priority(self, move: C4Move) -> float:
+        """Middle columns first, since they sit on the most winnable lines."""
+        return abs(move.column - self._width // 2)
+
     def outcome(self, state: C4State) -> Outcome:
         board = state.board
 
-        for row_idx, col_idx in product(range(self._height), range(self._width)):
-            symbol = board[row_idx][col_idx]
+        # A window is won exactly when one player holds all CONNECT of it, so
+        # the same precomputed runs material() walks serve here too. This is
+        # called at every node of every search, so it is worth the terseness.
+        for window in self._window_cells:
+            first = board[window[0][0]][window[0][1]]
 
-            if symbol == "":
+            if first == "":
                 continue
 
-            if any(self._is_line(board, row_idx, col_idx, step) for step in DIRECTIONS):
-                return self._get_player_for_symbol(symbol)
+            if all(board[row_idx][col_idx] == first for row_idx, col_idx in window):
+                return self._get_player_for_symbol(first)
 
         if self._is_board_full(board):
             return DRAW
@@ -161,18 +164,6 @@ class C4Game(Game[C4State, C4Move]):
     def _is_board_full(self, board: Board) -> bool:
         # Pieces stack from the bottom, so a full top row means a full board.
         return all(cell != "" for cell in board[self._height - 1])
-
-    def _is_line(
-        self, board: Board, row_idx: int, col_idx: int, step: Position
-    ) -> bool:
-        cells = self._line_cells(row_idx, col_idx, step)
-
-        if cells is None:
-            return False
-
-        symbol = board[row_idx][col_idx]
-
-        return all(board[row][col] == symbol for row, col in cells)
 
     def _line_cells(
         self, row_idx: int, col_idx: int, step: Position

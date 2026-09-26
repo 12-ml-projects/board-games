@@ -2,7 +2,7 @@ from math import tanh
 from typing import Final, TypeAlias
 
 from src.game.game import Game
-from src.game.outcome import DRAW, ONGOING, Outcome
+from src.game.outcome import DRAW, HEURISTIC_CEILING, ONGOING, Outcome
 from src.player import Player, opposite_player
 from src.tic_tac_toe.move import TTTMove
 from src.tic_tac_toe.state import Board, Cell, TTTState
@@ -16,10 +16,6 @@ LINES: Final[tuple[Line, ...]] = (
     tuple((i, i) for i in range(3)),
     tuple((i, 2 - i) for i in range(3)),
 )
-
-
-# Keeps heuristic values strictly inside the [-1.0, 1.0]. Boundary owned by final state
-HEURISTIC_CEILING: Final[float] = 0.9
 
 
 class TTTGame(Game[TTTState, TTTMove]):

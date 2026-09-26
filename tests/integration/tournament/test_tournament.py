@@ -6,7 +6,7 @@ from src.game.outcome import ONGOING
 from tests.integration.tournament.conftest import MinimaxTournamentFactory
 
 HYPERPARAMS = [(5, 0), (25, 0), (125, 0)]
-DESCRIPTIONS = [f"minimax(max_nodes={nodes})" for nodes, _ in HYPERPARAMS]
+DESCRIPTIONS = [f"minimax(max_nodes={nodes}, noise=0.0)" for nodes, _ in HYPERPARAMS]
 
 
 class TestTournament:
@@ -18,9 +18,15 @@ class TestTournament:
         )
         tournament.run()
 
-        _, agent_info_5 = tournament.get_by_description("minimax(max_nodes=5)")
-        _, agent_info_25 = tournament.get_by_description("minimax(max_nodes=25)")
-        _, agent_info_125 = tournament.get_by_description("minimax(max_nodes=125)")
+        _, agent_info_5 = tournament.get_by_description(
+            "minimax(max_nodes=5, noise=0.0)"
+        )
+        _, agent_info_25 = tournament.get_by_description(
+            "minimax(max_nodes=25, noise=0.0)"
+        )
+        _, agent_info_125 = tournament.get_by_description(
+            "minimax(max_nodes=125, noise=0.0)"
+        )
 
         assert agent_info_5.elo < agent_info_25.elo
         assert agent_info_25.elo < agent_info_125.elo

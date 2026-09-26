@@ -21,3 +21,6 @@ dist/
 
 # -- Editor -- #
 .vscode/*.json
+
+# -- output dump -- #
+temp_outputs/
