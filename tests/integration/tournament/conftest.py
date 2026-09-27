@@ -1,64 +1,88 @@
-from typing import Protocol, TypeAlias
+from dataclasses import dataclass
+from typing import Mapping, Protocol, Sequence
 
 import pytest
 
-from src.ai.minimax import MiniMax
+from experiments.variants import Variant, mcts_variants, minimax_variants
 from src.game.game import Game, Move, State
 from src.tournament.bradley_terry import bradley_terry
 from src.tournament.round_robin import round_robin
 from src.tournament.tournament import Tournament
 
-Seed: TypeAlias = int
-Nodes: TypeAlias = int
+# What a budget buys differs per family, so every test names its budgets per
+# family. Five times apart is enough for either to separate on either game
+# without the suite taking too long.
+BUDGETS: Mapping[str, Sequence[int]] = {
+    "minimax": (5, 25, 125),
+    "mcts": (5, 25, 125),
+}
 
 
-class MiniMaxAgentsFactory[StateT: State, MoveT: Move](Protocol):
-    def __call__(
-        self, game: Game[StateT, MoveT], hyperparams: list[tuple[Nodes, Seed]]
-    ) -> list[MiniMax[StateT, MoveT]]: ...
+@dataclass(frozen=True, kw_only=True)
+class Ladder[StateT: State, MoveT: Move]:
+    """A tournament, plus how its agents describe themselves, weakest first.
+
+    Agents name themselves differently per family, so a test that wants the
+    rungs in order asks here rather than spelling out descriptions itself.
+    """
+
+    tournament: Tournament[StateT, MoveT]
+    descriptions: Sequence[str]
+
+    def elos(self) -> list[float]:
+        return [
+            self.tournament.get_by_description(description)[1].elo
+            for description in self.descriptions
+        ]
 
 
-class MinimaxTournamentFactory[StateT: State, MoveT: Move](Protocol):
+class LadderFactory[StateT: State, MoveT: Move](Protocol):
     def __call__(
         self,
         game: Game[StateT, MoveT],
-        hyperparams: list[tuple[Nodes, Seed]],
+        budgets: Mapping[str, Sequence[int]],
         num_rounds: int,
-    ) -> Tournament[StateT, MoveT]: ...
+    ) -> Ladder[StateT, MoveT]: ...
 
 
 @pytest.fixture(params=["ttt", "c4"])
 def game(request: pytest.FixtureRequest) -> Game:
-    """Each test using this runs once per game, so nothing is tic-tac-toe specific."""
+    """Each test using this runs once per game."""
     return request.getfixturevalue(request.param)()
 
 
+@pytest.fixture(params=["minimax", "mcts"])
+def variant(request: pytest.FixtureRequest) -> Variant:
+    """Each test using this runs once per agent family."""
+    families = {
+        "minimax": lambda: minimax_variants([0.0]),
+        "mcts": lambda: mcts_variants([1.4]),
+    }
+
+    return families[request.param]()[0]
+
+
 @pytest.fixture()
-def minimax_agents() -> MiniMaxAgentsFactory:
-    def _minimax_agents(
-        game: Game, hyperparams: list[tuple[Nodes, Seed]]
-    ) -> list[MiniMax]:
-        return [
-            MiniMax(game=game, max_nodes=max_nodes, seed=seed)
-            for max_nodes, seed in hyperparams
+def ladder(variant: Variant) -> LadderFactory:
+    """Build a tournament of one family's agents, at that family's budgets."""
+
+    def _ladder(
+        game: Game, budgets: Mapping[str, Sequence[int]], num_rounds: int
+    ) -> Ladder:
+        agents = [
+            variant.build(game, budget=budget, seed=seed)
+            for seed, budget in enumerate(budgets[variant.family])
         ]
 
-    return _minimax_agents
-
-
-@pytest.fixture()
-def minimax_tournament(
-    minimax_agents: MiniMaxAgentsFactory,
-) -> MinimaxTournamentFactory:
-    def _minimax_tournament(
-        game: Game, hyperparams: list[tuple[Nodes, Seed]], num_rounds: int
-    ) -> Tournament:
-        return Tournament(
-            game=game,
-            match_maker=round_robin,
-            elo_estimator=bradley_terry,
-            agents=minimax_agents(game=game, hyperparams=hyperparams),
-            num_rounds=num_rounds,
+        return Ladder(
+            tournament=Tournament(
+                game=game,
+                match_maker=round_robin,
+                elo_estimator=bradley_terry,
+                agents=agents,
+                num_rounds=num_rounds,
+            ),
+            descriptions=[agent.description for agent in agents],
         )
 
-    return _minimax_tournament
+    return _ladder

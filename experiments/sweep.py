@@ -1,28 +1,21 @@
-"""Playing budgets off against each other, at given noise settings.
-
-Both experiments ask the same question of the same machinery and differ only
-in how they arrange the answer, so the playing lives here and the commands
-are left to present it.
-"""
-
 import json
 import random
 from dataclasses import asdict, dataclass
 from itertools import combinations
 from typing import Callable, Sequence
 
+from experiments.variants import Variant
 from experiments.wilson import wilson_interval
-from src.ai.minimax import MiniMax
 from src.game.game import Game
-from src.game.outcome import DRAW, ONGOING, SAFE_MARGIN
+from src.game.outcome import DRAW, ONGOING
 from src.tournament.match import Match
 
 
 @dataclass(frozen=True, kw_only=True)
 class PairResult:
+    variant: str
     stronger: int
     weaker: int
-    noise: float
     games: int
     strong_wins: int
     weak_wins: int
@@ -46,27 +39,22 @@ def pairings(budgets: Sequence[int]) -> list[tuple[int, int]]:
     return list(combinations(sorted(set(budgets)), 2))
 
 
-def total_games(
-    budgets: Sequence[int], noise_levels: Sequence[float], games: int
-) -> int:
-    return len(pairings(budgets)) * len(noise_levels) * games
+def total_games(budgets: Sequence[int], variants: Sequence[Variant], games: int) -> int:
+    return len(pairings(budgets)) * len(variants) * games
 
 
 def play_pair(
     game: Game,
     *,
+    variant: Variant,
     stronger: int,
     weaker: int,
-    noise: float,
     games: int,
     seed: int,
     on_game: Callable[[], None] | None = None,
 ) -> PairResult:
-    if not 0.0 <= noise < SAFE_MARGIN:
-        raise ValueError(f"noise must be at least 0 and below {SAFE_MARGIN}")
-
-    strong_agent = MiniMax(game, max_nodes=stronger, noise=noise, seed=seed)
-    weak_agent = MiniMax(game, max_nodes=weaker, noise=noise, seed=seed + 1)
+    strong_agent = variant.build(game, budget=stronger, seed=seed)
+    weak_agent = variant.build(game, budget=weaker, seed=seed + 1)
 
     strong_wins = 0
     weak_wins = 0
@@ -98,9 +86,9 @@ def play_pair(
     low, high = wilson_interval((strong_wins + draws / 2) / games, games)
 
     return PairResult(
+        variant=variant.label,
         stronger=stronger,
         weaker=weaker,
-        noise=noise,
         games=games,
         strong_wins=strong_wins,
         weak_wins=weak_wins,
@@ -113,16 +101,18 @@ def play_pair(
 def sweep(
     game: Game,
     *,
+    variants: Sequence[Variant],
     budgets: Sequence[int],
-    noise_levels: Sequence[float],
     games: int,
     seed: int,
     on_game: Callable[[], None] | None = None,
 ) -> list[PairResult]:
-    order = {noise: position for position, noise in enumerate(noise_levels)}
+    """Every budget against every other, under every variant."""
+
+    order = {variant.label: position for position, variant in enumerate(variants)}
     work = [
-        (noise, weaker, stronger)
-        for noise in noise_levels
+        (variant, weaker, stronger)
+        for variant in variants
         for weaker, stronger in pairings(budgets)
     ]
     random.Random(seed).shuffle(work)
@@ -130,17 +120,17 @@ def sweep(
     results = [
         play_pair(
             game,
+            variant=variant,
             stronger=stronger,
             weaker=weaker,
-            noise=noise,
             games=games,
             seed=seed,
             on_game=on_game,
         )
-        for noise, weaker, stronger in work
+        for variant, weaker, stronger in work
     ]
 
-    return sorted(results, key=lambda r: (order[r.noise], r.weaker, r.stronger))
+    return sorted(results, key=lambda r: (order[r.variant], r.weaker, r.stronger))
 
 
 def write_results(

@@ -16,9 +16,22 @@ The target is an AlphaZero agent that learns Connect Four from self-play. The po
 
 **Minimax** is negamax with alpha-beta pruning and iterative deepening, budgeted by **nodes searched per move** rather than by a fixed depth. One agent per budget gives a hierarchy of opponents from a single implementation.
 
-**MCTS** — tree search with UCB1 selection, sharing the existing evaluation function so that it can be compared against alpha-beta with evaluation held constant.
+**MCTS** is tree search with PUCT selection, budgeted by **simulations run per move**. It has no rollout: a leaf is judged by the same `evaluate` the minimax agents use, which is what makes the two comparable with the evaluation held fixed.
 
-**AlphaZero** — the same tree search with PUCT selection and a learned policy/value network in place of the heuristic.
+**AlphaZero** is the same tree search with a learned policy/value network supplying the priors and the leaf value at every move—essentially much like a human player trying to explore and evaluate what moves to consider.
+
+The seam between AlphaZero and MCTS is a single protocol:
+
+```python
+class LeafEvaluator[StateT: State, MoveT: Move](Protocol):
+    def __call__(
+        self, game: Game[StateT, MoveT], state: StateT
+    ) -> tuple[Mapping[MoveT, float], float]: ...
+```
+
+Priors over the legal moves, and the position's value from the side-to-move's perspective. The heuristic version returns flat priors and `game.evaluate(state)`; AlphaZero's returns both from a network.
+
+Note that we use **PUCT in both**. If the two used different selection rules, comparing them would vary selection and evaluation at once and isolate neither.
 
 Every agent implements one interface:
 
@@ -81,12 +94,20 @@ We ourselves choose to play adjacent agents, 2 on each side of the ladder.
 
 ## Experiments
 
-Both experiments share one routine (`experiments/sweep.py`) and differ only in how they arrange the results.
+Both experiments share one routine (`experiments/sweep.py`) and differ only in how they arrange the results. Each takes the agent family as a subcommand, since what counts as a budget differs — nodes searched for minimax, simulations run for MCTS — as does the setting worth varying alongside it:
+
+```bash
+python -m experiments.budget_grid.main minimax --nodes 400 --nodes 1600
+python -m experiments.budget_grid.main mcts --simulations 50 --simulations 200
+```
+
+`experiments/variants.py` holds one entry per family, saying how to build an agent at a given budget and what to label the result. Nothing else in the experiments knows which family is running.
 
 ### Noise sensitivity
 
 ```bash
-python -m experiments.noise_sensitivity.main --help
+python -m experiments.noise_sensitivity.main minimax --help
+python -m experiments.noise_sensitivity.main mcts --help
 ```
 
 Agents that always pick the same move replay the same game, which makes a tournament uninformative. One fix is a noise parameter `ε`: each move available at the root has its search value lowered by its own draw from `[0, ε]`, and the best survivor is played. A separate draw per move — one shared amount would cancel out and change nothing.
@@ -105,13 +126,16 @@ Alpha-beta prunes by proving a move *cannot be the best one*, and then stopping.
 
 Noise compares values, so those bounds stop being harmless. A move that loses on the spot might be cut off early and reported as "no better than 0.3", leaving it just under the leader where a nudge of `ε` is enough to pick it. The noise would be guarding a number already wrong by more than a point.
 
+For MCTS the swept setting is the **exploration constant** rather than noise — MCTS has no noise parameter, and its own source of non-determinism is which branches the search happens to favour.
+
 ### Budget grid
 
 ```bash
-python -m experiments.budget_grid.main --help
+python -m experiments.budget_grid.main minimax --help
+python -m experiments.budget_grid.main mcts --help
 ```
 
-Every budget against every other, one score matrix per noise level.
+Every budget against every other, one score matrix per setting.
 
 **The experiment's outcome was that the ladder is noisy below 400 and saturates above 25600 nodes** if we employ a factor of 4. This gives us a small ladder of 4 agents. A random agent makes this 5 agents to compare against and a ladder to climb.
 

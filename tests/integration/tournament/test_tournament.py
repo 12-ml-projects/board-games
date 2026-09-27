@@ -3,48 +3,31 @@ from itertools import combinations
 
 from src.game.game import Game
 from src.game.outcome import ONGOING
-from tests.integration.tournament.conftest import MinimaxTournamentFactory
-
-HYPERPARAMS = [(5, 0), (25, 0), (125, 0)]
-DESCRIPTIONS = [f"minimax(max_nodes={nodes}, noise=0.0)" for nodes, _ in HYPERPARAMS]
+from tests.integration.tournament.conftest import BUDGETS, LadderFactory
 
 
 class TestTournament:
-    def test_ladder_order(
-        self, minimax_tournament: MinimaxTournamentFactory, game: Game
-    ):
-        tournament = minimax_tournament(
-            game=game, hyperparams=HYPERPARAMS, num_rounds=10
-        )
-        tournament.run()
+    def test_ladder_order(self, ladder: LadderFactory, game: Game):
+        rungs = ladder(game=game, budgets=BUDGETS, num_rounds=10)
+        rungs.tournament.run()
 
-        _, agent_info_5 = tournament.get_by_description(
-            "minimax(max_nodes=5, noise=0.0)"
-        )
-        _, agent_info_25 = tournament.get_by_description(
-            "minimax(max_nodes=25, noise=0.0)"
-        )
-        _, agent_info_125 = tournament.get_by_description(
-            "minimax(max_nodes=125, noise=0.0)"
-        )
+        elos = rungs.elos()
 
-        assert agent_info_5.elo < agent_info_25.elo
-        assert agent_info_25.elo < agent_info_125.elo
+        assert elos == sorted(elos)
 
-    def test_tournament_is_reproducible(
-        self, minimax_tournament: MinimaxTournamentFactory, game: Game
-    ):
-        first, second = (self._run_and_rate(minimax_tournament, game) for _ in range(2))
+    def test_tournament_is_reproducible(self, ladder: LadderFactory, game: Game):
+        # Agent UUIDs are freshly minted per tournament, so the records of two
+        # identical runs never compare equal. What has to match is the ratings.
+        first, second = (self._run_and_rate(ladder, game) for _ in range(2))
 
         assert first == second
 
     def test_every_pairing_is_played_from_both_sides(
-        self, minimax_tournament: MinimaxTournamentFactory, game: Game
+        self, ladder: LadderFactory, game: Game
     ):
-        tournament = minimax_tournament(
-            game=game, hyperparams=HYPERPARAMS, num_rounds=4
-        )
-        records = tournament.run()
+        # Bradley-Terry has no term for moving first, so its ratings are only
+        # meaningful while going first is shared out evenly.
+        records = ladder(game=game, budgets=BUDGETS, num_rounds=3).tournament.run()
 
         games_as_alpha = Counter(pairing[0] for _, pairing, _ in records)
         games_played = Counter(
@@ -57,40 +40,23 @@ class TestTournament:
             for agent_id, played in games_played.items()
         )
 
-    def test_plays_every_pairing_each_round(
-        self, minimax_tournament: MinimaxTournamentFactory, game: Game
-    ):
+    def test_plays_every_pairing_each_round(self, ladder: LadderFactory, game: Game):
         num_rounds = 3
-        tournament = minimax_tournament(
-            game=game, hyperparams=HYPERPARAMS, num_rounds=num_rounds
-        )
+        rungs = ladder(game=game, budgets=BUDGETS, num_rounds=num_rounds)
 
-        records = tournament.run()
+        records = rungs.tournament.run()
 
-        pairings = len(list(combinations(HYPERPARAMS, 2)))
+        pairings = len(list(combinations(rungs.descriptions, 2)))
         assert len(records) == num_rounds * pairings * 2
 
-    def test_every_match_is_played_out(
-        self, minimax_tournament: MinimaxTournamentFactory, game: Game
-    ):
-        tournament = minimax_tournament(
-            game=game, hyperparams=HYPERPARAMS, num_rounds=3
-        )
-
-        records = tournament.run()
+    def test_every_match_is_played_out(self, ladder: LadderFactory, game: Game):
+        records = ladder(game=game, budgets=BUDGETS, num_rounds=3).tournament.run()
 
         assert records
         assert all(result.outcome != ONGOING for _, _, result in records)
 
-    def _run_and_rate(
-        self, minimax_tournament: MinimaxTournamentFactory, game: Game
-    ) -> dict[str, float]:
-        tournament = minimax_tournament(
-            game=game, hyperparams=HYPERPARAMS, num_rounds=6
-        )
-        tournament.run()
+    def _run_and_rate(self, ladder: LadderFactory, game: Game) -> dict[str, float]:
+        rungs = ladder(game=game, budgets=BUDGETS, num_rounds=6)
+        rungs.tournament.run()
 
-        return {
-            agent.description: info.elo
-            for agent, info in map(tournament.get_by_description, DESCRIPTIONS)
-        }
+        return dict(zip(rungs.descriptions, rungs.elos()))

@@ -1,15 +1,22 @@
-"""Every budget against every other, at each noise setting."""
+"""Every budget of one agent family against every other, at each setting."""
 
 from typing import Sequence
 
 import click
 
 from experiments.games import GAMES
+from experiments.options import shared_options
 from experiments.sweep import PairResult, sweep, total_games, write_results
+from experiments.variants import Variant, mcts_variants, minimax_variants
 
 
-@click.command()
-@click.option("--game-name", type=click.Choice(sorted(GAMES)), default="connect_four")
+@click.group()
+def budget_grid() -> None:
+    pass
+
+
+@budget_grid.command("minimax")
+@shared_options
 @click.option(
     "--nodes",
     "budgets",
@@ -23,21 +30,70 @@ from experiments.sweep import PairResult, sweep, total_games, write_results
     "noise_levels",
     type=float,
     multiple=True,
-    default=(0.0, 0.04, 0.08),
+    default=(0.0,),
     help="Noise settings to try; every agent carries the same one.",
 )
-@click.option("--games", type=int, default=50, help="Games played per pairing.")
-@click.option("--seed", type=int, default=0)
-@click.option(
-    "--out",
-    type=click.Path(dir_okay=False),
-    default=None,
-    help="Write results as JSON.",
-)
-def budget_grid(
+def minimax_command(
     game_name: str,
+    games: int,
+    seed: int,
+    out: str | None,
     budgets: Sequence[int],
     noise_levels: Sequence[float],
+) -> None:
+    """Minimax, budgeted by nodes searched."""
+    _report(
+        game_name=game_name,
+        budgets=budgets,
+        variants=minimax_variants(noise_levels),
+        games=games,
+        seed=seed,
+        out=out,
+    )
+
+
+@budget_grid.command("mcts")
+@shared_options
+@click.option(
+    "--simulations",
+    "budgets",
+    type=int,
+    multiple=True,
+    default=(20, 50, 200, 800),
+    help="Simulation budgets to pit against one another.",
+)
+@click.option(
+    "--exploration",
+    "explorations",
+    type=float,
+    multiple=True,
+    default=(1.4,),
+    help="Exploration constants to try; every agent carries the same one.",
+)
+def mcts_command(
+    game_name: str,
+    games: int,
+    seed: int,
+    out: str | None,
+    budgets: Sequence[int],
+    explorations: Sequence[float],
+) -> None:
+    """MCTS, budgeted by simulations run."""
+    _report(
+        game_name=game_name,
+        budgets=budgets,
+        variants=mcts_variants(explorations),
+        games=games,
+        seed=seed,
+        out=out,
+    )
+
+
+def _report(
+    *,
+    game_name: str,
+    budgets: Sequence[int],
+    variants: Sequence[Variant],
     games: int,
     seed: int,
     out: str | None,
@@ -45,28 +101,27 @@ def budget_grid(
     game = GAMES[game_name]()
     ranked = sorted(set(budgets))
 
-    played = total_games(ranked, noise_levels, games)
-
-    try:
-        with click.progressbar(length=played, label="playing") as progress:
-            results = sweep(
-                game,
-                budgets=ranked,
-                noise_levels=noise_levels,
-                games=games,
-                seed=seed,
-                on_game=lambda: progress.update(1),
-            )
-    except ValueError as invalid:
-        raise click.BadParameter(str(invalid))
+    with click.progressbar(
+        length=total_games(ranked, variants, games), label="playing"
+    ) as progress:
+        results = sweep(
+            game,
+            variants=variants,
+            budgets=ranked,
+            games=games,
+            seed=seed,
+            on_game=lambda: progress.update(1),
+        )
 
     click.echo(
         f"\n{game_name}: {len(ranked)} budgets, {len(results)} pairings played, "
-        f"{played} games in total"
+        f"{games} games each"
     )
 
-    for noise in noise_levels:
-        _show_matrix(ranked, [r for r in results if r.noise == noise], noise)
+    for variant in variants:
+        _show_matrix(
+            ranked, [r for r in results if r.variant == variant.label], variant
+        )
 
     if out:
         write_results(out, game_name=game_name, seed=seed, results=results)
@@ -74,7 +129,7 @@ def budget_grid(
 
 
 def _show_matrix(
-    ranked: Sequence[int], results: Sequence[PairResult], noise: float
+    ranked: Sequence[int], results: Sequence[PairResult], variant: Variant
 ) -> None:
     shares = {}
 
@@ -82,7 +137,7 @@ def _show_matrix(
         shares[(result.stronger, result.weaker)] = result.score
         shares[(result.weaker, result.stronger)] = 1.0 - result.score
 
-    click.echo(f"\nnoise = {noise}   (row's score share against column)")
+    click.echo(f"\n{variant.label}   (row's score share against column)")
     click.echo("        | " + " ".join(f"{budget:>6}" for budget in ranked))
 
     for row in ranked:
