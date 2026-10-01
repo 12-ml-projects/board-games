@@ -146,3 +146,11 @@ Evaluation holds the anchor ratings **fixed** and fits only the new agent's.
 **Evaluate against the negamax agents.** Evaluate against adjacent agents to get an estimated Elo, starting with the weakest agent. The next time an evaluation tournament is held, place the agent on the estimated Elo.
 
 **Checkpoint promotion.** If the agent improves past the ladder, it can still be played against itself at an earlier point in time and evaluated as such.
+
+## A note on AI assistance
+
+This repository was written with substantial help from an AI assistant (Claude), used to help guide implementation, refactoring, profiling and running the experiments. The design decisions are mine: what to measure, how to parametrise the ladder, which results to trust, writing example tests, test fixtures, what to throw away. The boilerplate, overall architecture (ABCs, modules etc.) and algorithms are my own, from extensive reading.
+
+AI assistance has been used and reviewed to fill in test suites, find mistakes, writing documentation, fill in gaps, boilerplate, discuss ideas, and run numerous throw-away experiments.
+
+Where the assistant was most useful was as a fast way to settle questions rather than discuss them — writing a throwaway script, running it, and reporting what came back. Several of the findings above came out that way, including some that contradicted what either of us expected.
